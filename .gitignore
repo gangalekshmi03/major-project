@@ -1,1 +1,27 @@
-node_modules
+# Node / Frontend
+node_modules/
+dist/
+build/
+
+# Expo
+.expo/
+web-build/
+expo-env.d.ts
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Environment variables
+.env
+.env.*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+npm-debug.*
+yarn-debug.*
+yarn-error.*
