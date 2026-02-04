@@ -1,0 +1,35 @@
+# Node / Frontend
+node_modules/
+dist/
+build/
+web-build/
+package-lock.json
+
+# Expo
+.expo/
+expo-env.d.ts
+
+# Native
+ios/
+android/
+.kotlin/
+
+# Debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+.env*.local
+*.pem
+
+# Python / Backend
+.venv/
+__pycache__/
+*.pyc
+*.tsbuildinfo
