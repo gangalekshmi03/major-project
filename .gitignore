@@ -25,3 +25,5 @@ Thumbs.db
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+venv/
+social-backend/venv/
