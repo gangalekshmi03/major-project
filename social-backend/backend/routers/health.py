@@ -59,6 +59,14 @@ def _normalize_ml_response(path: str, data: dict):
         normalized["fitness_level"] = _first_value(
             normalized, ["fitness_level", "readiness", "status", "fitness"]
         )
+        if normalized.get("match_fitness_score") is None:
+            readiness = str(_first_value(normalized, ["readiness", "status", "fitness_level"], "")).lower()
+            if "high" in readiness or "ready" in readiness:
+                normalized["match_fitness_score"] = 85
+            elif "moderate" in readiness or "partial" in readiness:
+                normalized["match_fitness_score"] = 60
+            elif readiness:
+                normalized["match_fitness_score"] = 35
 
     elif path == "/training_load":
         normalized["training_load"] = _first_value(
@@ -81,6 +89,109 @@ def _normalize_ml_response(path: str, data: dict):
         normalized["confidence"] = _first_value(
             normalized, ["confidence", "probability", "score"]
         )
+
+    return normalized
+
+
+def _normalize_ml_payload(path: str, payload: dict):
+    normalized = dict(payload or {})
+
+    if path == "/sleep":
+        # Her model expects: age, hours
+        if "hours" not in normalized:
+            intensity = str(normalized.get("training_intensity", "moderate")).lower()
+            normalized["hours"] = {"low": 8.0, "moderate": 7.5, "high": 7.0}.get(intensity, 7.5)
+
+    elif path == "/recovery":
+        # Her model expects: training_hours, sleep_hours, soreness
+        if "training_hours" not in normalized:
+            intensity = str(normalized.get("training_intensity", "moderate")).lower()
+            normalized["training_hours"] = {"low": 1.5, "moderate": 2.5, "high": 3.5}.get(intensity, 2.5)
+        if "soreness" not in normalized:
+            soreness = str(normalized.get("muscle_soreness", "moderate")).lower()
+            normalized["soreness"] = "yes" if soreness in ["moderate", "high", "yes", "true"] else "no"
+
+    elif path == "/match_fitness":
+        # Her model expects: sleep_hours, training, soreness
+        if "sleep_hours" not in normalized:
+            fatigue = str(normalized.get("fatigue_level", "moderate")).lower()
+            normalized["sleep_hours"] = {"low": 8.0, "moderate": 7.0, "high": 5.5}.get(fatigue, 7.0)
+        if "training" not in normalized:
+            distance = float(normalized.get("distance_km", 0) or 0)
+            sprints = int(normalized.get("sprints", 0) or 0)
+            if distance >= 10 or sprints >= 25:
+                normalized["training"] = "heavy"
+            elif distance >= 6 or sprints >= 15:
+                normalized["training"] = "moderate"
+            else:
+                normalized["training"] = "light"
+        if "soreness" not in normalized:
+            fatigue = str(normalized.get("fatigue_level", "moderate")).lower()
+            normalized["soreness"] = "yes" if fatigue in ["moderate", "high"] else "no"
+
+    elif path == "/training_load":
+        # Her model expects: intensity, duration_min, sleep_hours
+        if "duration_min" not in normalized and "session_duration_min" in normalized:
+            normalized["duration_min"] = normalized["session_duration_min"]
+        intensity = str(normalized.get("intensity", "moderate")).lower()
+        if intensity == "moderate":
+            normalized["intensity"] = "medium"
+        if "sleep_hours" not in normalized:
+            try:
+                rpe = float(normalized.get("rpe", 6) or 6)
+                normalized["sleep_hours"] = max(4.0, min(9.0, round(9.0 - (rpe * 0.5), 1)))
+            except Exception:
+                normalized["sleep_hours"] = 7.0
+
+    elif path == "/diet":
+        # Goal vocabulary mapping.
+        goal = str(normalized.get("goal", "")).strip().lower()
+        goal_map = {
+            "lose": "loss",
+            "fat loss": "loss",
+            "weight loss": "loss",
+            "gain": "gain",
+            "muscle gain": "gain",
+            "maintain": "maintain",
+        }
+        if goal in goal_map:
+            normalized["goal"] = goal_map[goal]
+
+        # Day-type vocabulary mapping.
+        day = str(normalized.get("day", "")).strip().lower()
+        day_map = {
+            "match day": "match",
+            "training day": "training",
+            "rest day": "rest",
+            "match": "match",
+            "training": "training",
+            "rest": "rest",
+        }
+        if day in day_map:
+            normalized["day"] = day_map[day]
+
+        # Position vocabulary mapping.
+        position = str(normalized.get("position", "")).strip().lower()
+        position_map = {
+            "goalkeeper": "gk",
+            "goal keeper": "gk",
+            "defender": "def",
+            "midfielder": "mid",
+            "forward": "fwd",
+            "striker": "fwd",
+        }
+        if position in position_map:
+            normalized["position"] = position_map[position]
+
+    elif path == "/calorie":
+        # UI may send typo/alias for quantity.
+        if "quantity_g" not in normalized and "quality" in normalized:
+            normalized["quantity_g"] = normalized["quality"]
+
+    elif path == "/water":
+        # Optional alias from UI labels.
+        if "duration_hr" not in normalized and "duration_hours" in normalized:
+            normalized["duration_hr"] = normalized["duration_hours"]
 
     return normalized
 
@@ -141,13 +252,14 @@ def _path_variants(path: str):
 
 def _call_ml(path: str, payload: dict):
     # Tries modern API contract first, then legacy Flask UI routes.
+    mapped_payload = _normalize_ml_payload(path, payload)
     attempts = []
     for p in _path_variants(path):
-        attempts.append(("POST", f"{ML_BASE_URL}/api{p}", payload))
+        attempts.append(("POST", f"{ML_BASE_URL}/api{p}", mapped_payload))
     for p in _path_variants(path):
-        attempts.append(("POST", f"{ML_BASE_URL}{p}", payload))
+        attempts.append(("POST", f"{ML_BASE_URL}{p}", mapped_payload))
     for p in _path_variants(path):
-        attempts.append(("GET", f"{ML_BASE_URL}{p}", _to_query_payload(path, payload)))
+        attempts.append(("GET", f"{ML_BASE_URL}{p}", _to_query_payload(path, mapped_payload)))
 
     last_status = 502
     last_detail = "No response from ML service"
