@@ -1,6 +1,7 @@
 # app/routers/users.py
 
 from fastapi import APIRouter, HTTPException, Depends, Form
+from datetime import datetime
 from bson import ObjectId
 
 from ..db import users, posts
@@ -64,20 +65,45 @@ def update_profile(
     full_name: str = Form(None),
     bio: str = Form(None),
     profile_pic: str = Form(None),
-    current_user: str = Depends(get_current_user)
+    age: int = Form(None),
+    gender: str = Form(None),
+    height_cm: float = Form(None),
+    weight_kg: float = Form(None),
+    current_user: dict = Depends(get_current_user)
 ):
-    user_id = ObjectId(current_user)
+    user_id = ObjectId(current_user["_id"])
     update = {}
+    push_update = {}
 
     if username is not None: update["username"] = username
     if full_name is not None: update["full_name"] = full_name
     if bio is not None: update["bio"] = bio
     if profile_pic is not None: update["profile_pic"] = profile_pic
+    if age is not None: update["age"] = age
+    if gender is not None: update["gender"] = gender
+    if height_cm is not None:
+        update["height_cm"] = height_cm
+        push_update["height_history"] = {
+            "value": height_cm,
+            "recorded_at": datetime.utcnow().isoformat()
+        }
+    if weight_kg is not None:
+        update["weight_kg"] = weight_kg
+        push_update["weight_history"] = {
+            "value": weight_kg,
+            "recorded_at": datetime.utcnow().isoformat()
+        }
 
-    if not update:
+    if not update and not push_update:
         raise HTTPException(status_code=400, detail="No fields to update")
 
-    users.update_one({"_id": user_id}, {"$set": update})
+    mongo_update = {}
+    if update:
+        mongo_update["$set"] = update
+    if push_update:
+        mongo_update["$push"] = push_update
+
+    users.update_one({"_id": user_id}, mongo_update)
 
     return {"status": "success", "message": "Profile updated"}
 
@@ -95,9 +121,9 @@ def update_stats(
     position: str = Form(None),
     preferred_foot: str = Form(None),
     jersey_number: int = Form(None),
-    current_user: str = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user)
 ):
-    user_id = ObjectId(current_user)
+    user_id = ObjectId(current_user["_id"])
     update = {}
 
     if matches_played is not None: update["matches_played"] = matches_played

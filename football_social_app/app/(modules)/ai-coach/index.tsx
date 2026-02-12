@@ -1,9 +1,20 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import type { ComponentProps } from "react";
+
+type MCIName = ComponentProps<typeof MaterialCommunityIcons>["name"];
 
 export default function AICoachScreen() {
-  const coachingData = {
+  const coachingData: {
+    strengths: { title: string; value: string; icon: MCIName }[];
+    weaknesses: { title: string; improvement: string; icon: MCIName }[];
+    position: string;
+    confidence: string;
+    trainingPlan: { day: string; focus: string; exercises: string[] }[];
+    motivation: string;
+  } = {
     strengths: [
       { title: 'Speed & Agility', value: '92%', icon: 'lightning-bolt' },
       { title: 'Passing Accuracy', value: '91%', icon: 'target' },

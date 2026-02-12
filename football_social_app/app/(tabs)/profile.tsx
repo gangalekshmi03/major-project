@@ -1,8 +1,11 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Alert } from 'react-native';
+import React, { type ComponentProps } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/context/useAuth';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+
+type MciName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
@@ -14,18 +17,18 @@ export default function ProfileScreen() {
     ]);
   };
 
-  const stats = [
+  const stats: { label: string; value: string; icon: MciName }[] = [
     { label: 'Matches', value: '12', icon: 'soccer' },
     { label: 'Goals', value: '24', icon: 'target' },
     { label: 'Assists', value: '8', icon: 'basketball' },
     { label: 'Rating', value: '8.5', icon: 'star' },
   ];
 
-  const menuItems = [
-    { icon: 'information', label: 'Profile Details', onPress: () => {} },
+  const menuItems: { icon: MciName; label: string; onPress: () => void }[] = [
+    { icon: 'information', label: 'Profile Details', onPress: () => router.push("/(modules)/profile-details" as any) },
     { icon: 'history', label: 'Performance History', onPress: () => {} },
     { icon: 'medal', label: 'Achievements', onPress: () => {} },
-    { icon: 'pencil-multiple', label: 'My Posts', onPress: () => router.push("/(modules)/my-posts" as any) },
+    { icon: 'pencil-outline', label: 'My Posts', onPress: () => router.push("/(modules)/my-posts" as any) },
     { icon: 'cog', label: 'Settings', onPress: () => {} },
     { icon: 'shield-lock', label: 'Privacy & Security', onPress: () => {} },
   ];
@@ -237,7 +240,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   playerCard: {
-    backgroundColor: 'linear-gradient(135deg, #4ECDC4, #44A08D)',
+    backgroundColor: '#4ECDC4',
     borderRadius: 12,
     padding: 16,
     shadowColor: '#000',

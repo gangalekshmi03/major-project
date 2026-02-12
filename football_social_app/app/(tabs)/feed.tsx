@@ -1,12 +1,16 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, FlatList, ActivityIndicator, Alert, Image } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, FlatList, ActivityIndicator, Alert, Image } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useState, useEffect } from "react";
 import { getFeed, likePost, unlikePost, addComment } from "../../api/posts";
+import API from "../../api/client";
 
 export default function FeedScreen() {
+  const defaultAvatar = require("../../assets/images/icon.png");
   const [posts, setPosts] = useState<any[]>([]);
   const [liked, setLiked] = useState<{ [key: string]: boolean }>({});
   const [loading, setLoading] = useState(true);
+  const apiBaseUrl = (API.defaults.baseURL || "").replace(/\/$/, "");
 
   useEffect(() => {
     loadFeed();
@@ -65,7 +69,22 @@ export default function FeedScreen() {
 
     const owner = item.owner || {};
     const creatorName = owner.full_name || owner.username || 'Anonymous';
-    const profilePic = owner.profile_pic;
+    const rawProfilePic = owner.profile_pic;
+    const cleanedProfilePic =
+      typeof rawProfilePic === "string" &&
+      rawProfilePic.trim().length > 0 &&
+      rawProfilePic !== "null" &&
+      rawProfilePic !== "undefined"
+        ? rawProfilePic.trim()
+        : undefined;
+    const profilePic =
+      cleanedProfilePic && /^https?:\/\//i.test(cleanedProfilePic)
+        ? cleanedProfilePic
+        : cleanedProfilePic && /^(file|content):\/\//i.test(cleanedProfilePic)
+          ? cleanedProfilePic
+          : cleanedProfilePic && apiBaseUrl
+            ? `${apiBaseUrl}${cleanedProfilePic.startsWith("/") ? "" : "/"}${cleanedProfilePic}`
+            : undefined;
 
     const getAvatarEmoji = (name?: string) => {
       const emojis: { [key: string]: string } = {
@@ -83,13 +102,10 @@ export default function FeedScreen() {
         <View style={styles.postHeader}>
           <View style={styles.authorInfo}>
             {profilePic ? (
-              <Image
-                source={{ uri: profilePic }}
-                style={styles.avatarImage}
-              />
+              <Image source={{ uri: profilePic }} style={styles.avatarImage} />
             ) : (
               <View style={styles.avatar}>
-                <Text style={styles.avatarEmoji}>{getAvatarEmoji()}</Text>
+                <Image source={defaultAvatar} style={styles.avatarImage} />
               </View>
             )}
             <View style={{ flex: 1 }}>

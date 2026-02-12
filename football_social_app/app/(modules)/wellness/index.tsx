@@ -1,7 +1,21 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, TextInput, Alert } from "react-native";
-import { useState } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, Image } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useEffect, useState } from "react";
 import { router } from "expo-router";
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { getCurrentUser } from "@/api/users";
+import { logWellnessData } from "@/api/wellness";
+import {
+  ActivityLevel,
+  Goal,
+  TrainingIntensity,
+  getBmi,
+  getCalorie,
+  getIdealWeight,
+  getSleep,
+  getWater,
+} from "@/api/health";
+import * as ImagePicker from "expo-image-picker";
 
 type Screen = 'menu' | 'input' | 'dashboard';
 
@@ -17,6 +31,10 @@ export default function WellnessScreen() {
   const [water, setWater] = useState('');
   const [sleep, setSleep] = useState('');
   const [calories, setCalories] = useState('');
+  const [activityLevel, setActivityLevel] = useState<ActivityLevel>("moderate");
+  const [goal, setGoal] = useState<Goal>("maintain");
+  const [trainingIntensity, setTrainingIntensity] = useState<TrainingIntensity>("moderate");
+  const [profileMissing, setProfileMissing] = useState(false);
 
   const [wellnessData, setWellnessData] = useState({
     water: 1.5,
@@ -24,17 +42,75 @@ export default function WellnessScreen() {
     calories: 1800,
   });
 
-  const handleLogData = () => {
+  const [healthInsights, setHealthInsights] = useState<{
+    bmi?: number;
+    bmi_category?: string;
+    ideal_weight_kg?: number;
+    daily_calories?: number;
+    water_intake_liters?: number;
+    recommended_sleep_hours?: number;
+  }>({});
+  const [recoveryInput, setRecoveryInput] = useState({
+    training_intensity: "moderate" as TrainingIntensity,
+    sleep_hours: "7",
+    muscle_soreness: "moderate" as "low" | "moderate" | "high",
+  });
+  const [matchFitnessInput, setMatchFitnessInput] = useState({
+    distance_km: "8",
+    sprints: "20",
+    fatigue_level: "moderate" as "low" | "moderate" | "high",
+  });
+  const [trainingLoadInput, setTrainingLoadInput] = useState({
+    session_duration_min: "60",
+    intensity: "moderate" as TrainingIntensity,
+    rpe: "6",
+  });
+  const [dietInput, setDietInput] = useState({
+    intensity: "moderate" as TrainingIntensity,
+    goal: "maintain" as Goal,
+    day: "training" as "training" | "rest",
+    position: "mid",
+  });
+
+  const [recoveryResult, setRecoveryResult] = useState<any>(null);
+  const [matchFitnessResult, setMatchFitnessResult] = useState<any>(null);
+  const [trainingLoadResult, setTrainingLoadResult] = useState<any>(null);
+  const [dietResult, setDietResult] = useState<any>(null);
+  const [foodImageUri, setFoodImageUri] = useState<string>("");
+  const [foodImageBase64, setFoodImageBase64] = useState<string>("");
+  const [foodPrediction, setFoodPrediction] = useState<{ predicted_class?: string; confidence?: number } | null>(null);
+  const getErrorMessage = (error: any) => {
+    return (
+      error?.response?.data?.detail ||
+      error?.response?.data?.error ||
+      error?.message ||
+      "Request failed"
+    );
+  };
+
+  const handleLogData = async () => {
     if (!water && !sleep && !calories) {
       Alert.alert('Error', 'Please enter at least one metric');
       return;
     }
 
-    setWellnessData({
+    const next = {
       water: water ? parseFloat(water) : wellnessData.water,
       sleep: sleep ? parseFloat(sleep) : wellnessData.sleep,
       calories: calories ? parseInt(calories) : wellnessData.calories,
-    });
+    };
+    setWellnessData(next);
+
+    try {
+      await logWellnessData({
+        water: next.water,
+        sleep: next.sleep,
+        calories: next.calories,
+      });
+    } catch (error) {
+      console.log("logWellnessData error", error);
+      Alert.alert("Error", String(getErrorMessage(error)));
+    }
 
     Alert.alert('Success', 'Data logged successfully!');
     setWater('');
@@ -84,6 +160,159 @@ export default function WellnessScreen() {
 
     return recommendations;
   };
+
+  const fetchHealthInsights = async () => {
+    try {
+      const res = await getCurrentUser();
+      const user = res?.user;
+      if (!user?.age || !user?.gender || !user?.height_cm || !user?.weight_kg) {
+        setProfileMissing(true);
+        return;
+      }
+      setProfileMissing(false);
+
+      const [bmiRes, idealRes, waterRes, sleepRes, calorieRes] = await Promise.all([
+        getBmi({ height_cm: user.height_cm, weight_kg: user.weight_kg }),
+        getIdealWeight({ height_cm: user.height_cm, gender: user.gender }),
+        getWater({ weight_kg: user.weight_kg, activity_level: activityLevel }),
+        getSleep({ age: user.age, training_intensity: trainingIntensity }),
+        getCalorie({
+          age: user.age,
+          gender: user.gender,
+          height_cm: user.height_cm,
+          weight_kg: user.weight_kg,
+          activity_level: activityLevel,
+          goal,
+        }),
+      ]);
+
+      setHealthInsights({
+        bmi: bmiRes?.bmi,
+        bmi_category: bmiRes?.category,
+        ideal_weight_kg: idealRes?.ideal_weight_kg,
+        water_intake_liters: waterRes?.water_intake_liters,
+        recommended_sleep_hours: sleepRes?.recommended_sleep_hours,
+        daily_calories: calorieRes?.daily_calories,
+      });
+    } catch (error) {
+      console.log("fetchHealthInsights error", error);
+      Alert.alert("Error", String(getErrorMessage(error)));
+    }
+  };
+
+  const runRecovery = async () => {
+    try {
+      const res = await (await import("@/api/health")).getRecovery({
+        training_intensity: recoveryInput.training_intensity,
+        sleep_hours: Number(recoveryInput.sleep_hours),
+        muscle_soreness: recoveryInput.muscle_soreness,
+      });
+      setRecoveryResult(res);
+    } catch (error) {
+      console.log("runRecovery error", error);
+      Alert.alert("Error", "Failed to fetch recovery recommendation");
+    }
+  };
+
+  const runMatchFitness = async () => {
+    try {
+      const res = await (await import("@/api/health")).getMatchFitness({
+        distance_km: Number(matchFitnessInput.distance_km),
+        sprints: Number(matchFitnessInput.sprints),
+        fatigue_level: matchFitnessInput.fatigue_level,
+      });
+      setMatchFitnessResult(res);
+    } catch (error) {
+      console.log("runMatchFitness error", error);
+      Alert.alert("Error", "Failed to fetch match fitness");
+    }
+  };
+
+  const runTrainingLoad = async () => {
+    try {
+      const res = await (await import("@/api/health")).getTrainingLoad({
+        session_duration_min: Number(trainingLoadInput.session_duration_min),
+        intensity: trainingLoadInput.intensity,
+        rpe: Number(trainingLoadInput.rpe),
+      });
+      setTrainingLoadResult(res);
+    } catch (error) {
+      console.log("runTrainingLoad error", error);
+      Alert.alert("Error", "Failed to fetch training load");
+    }
+  };
+
+  const runDiet = async () => {
+    try {
+      const res = await getCurrentUser();
+      const user = res?.user;
+      if (!user?.age || !user?.gender || !user?.height_cm || !user?.weight_kg) {
+        Alert.alert("Missing Profile", "Please update your profile details first.");
+        return;
+      }
+      const api = await import("@/api/health");
+      const out = await api.getDiet({
+        age: user.age,
+        gender: user.gender,
+        height_cm: user.height_cm,
+        weight_kg: user.weight_kg,
+        intensity: dietInput.intensity,
+        goal: dietInput.goal,
+        day: dietInput.day,
+        position: dietInput.position,
+      });
+      setDietResult(out);
+    } catch (error) {
+      console.log("runDiet error", error);
+      Alert.alert("Error", "Failed to fetch diet plan");
+    }
+  };
+
+  const pickFoodImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.8,
+        base64: true,
+      });
+      if (!result.canceled) {
+        const asset = result.assets[0];
+        setFoodImageUri(asset.uri);
+        setFoodImageBase64(asset.base64 || "");
+        setFoodPrediction(null);
+      }
+    } catch (error) {
+      console.log("pickFoodImage error", error);
+      Alert.alert("Error", "Failed to pick image");
+    }
+  };
+
+  const runFoodPredict = async () => {
+    console.log("runFoodPredict clicked", foodImageUri);
+    if (!foodImageUri) {
+      Alert.alert("Missing Image", "Please select a food image first.");
+      return;
+    }
+    if (!foodImageBase64) {
+      Alert.alert("Error", "Image encoding failed. Please pick the image again.");
+      return;
+    }
+    try {
+      const api = await import("@/api/health");
+      const res = await api.predictImage({ image_base64: foodImageBase64 });
+      setFoodPrediction(res);
+    } catch (error) {
+      console.log("runFoodPredict error", error);
+      Alert.alert("Error", String(getErrorMessage(error)));
+    }
+  };
+
+  useEffect(() => {
+    if (screen === "dashboard") {
+      fetchHealthInsights();
+    }
+  }, [screen, activityLevel, goal, trainingIntensity]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -272,11 +501,267 @@ export default function WellnessScreen() {
             ))}
           </View>
 
+          <View style={styles.healthSection}>
+            <Text style={styles.sectionTitle}>Health Insights</Text>
+            {profileMissing ? (
+              <View style={styles.healthNotice}>
+                <Text style={styles.healthNoticeText}>
+                  Add age, gender, height, and weight in Profile Details to see insights.
+                </Text>
+                <TouchableOpacity
+                  style={styles.healthCta}
+                  onPress={() => router.push("/(modules)/profile-details" as any)}
+                >
+                  <Text style={styles.healthCtaText}>Update Profile</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <>
+                <View style={styles.preferenceRow}>
+                  <Text style={styles.prefLabel}>Activity</Text>
+                  <View style={styles.prefChips}>
+                    {(["low", "moderate", "high"] as ActivityLevel[]).map((lvl) => (
+                      <TouchableOpacity
+                        key={lvl}
+                        style={[styles.prefChip, activityLevel === lvl && styles.prefChipActive]}
+                        onPress={() => setActivityLevel(lvl)}
+                      >
+                        <Text style={[styles.prefChipText, activityLevel === lvl && styles.prefChipTextActive]}>
+                          {lvl}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                <View style={styles.preferenceRow}>
+                  <Text style={styles.prefLabel}>Goal</Text>
+                  <View style={styles.prefChips}>
+                    {(["lose", "maintain", "gain"] as Goal[]).map((g) => (
+                      <TouchableOpacity
+                        key={g}
+                        style={[styles.prefChip, goal === g && styles.prefChipActive]}
+                        onPress={() => setGoal(g)}
+                      >
+                        <Text style={[styles.prefChipText, goal === g && styles.prefChipTextActive]}>
+                          {g}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                <View style={styles.preferenceRow}>
+                  <Text style={styles.prefLabel}>Training</Text>
+                  <View style={styles.prefChips}>
+                    {(["low", "moderate", "high"] as TrainingIntensity[]).map((t) => (
+                      <TouchableOpacity
+                        key={t}
+                        style={[styles.prefChip, trainingIntensity === t && styles.prefChipActive]}
+                        onPress={() => setTrainingIntensity(t)}
+                      >
+                        <Text style={[styles.prefChipText, trainingIntensity === t && styles.prefChipTextActive]}>
+                          {t}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                <View style={styles.healthGrid}>
+                  <View style={styles.healthCard}>
+                    <Text style={styles.healthLabel}>BMI</Text>
+                    <Text style={styles.healthValue}>{healthInsights.bmi ?? "—"}</Text>
+                    <Text style={styles.healthSub}>{healthInsights.bmi_category ?? "—"}</Text>
+                  </View>
+                  <View style={styles.healthCard}>
+                    <Text style={styles.healthLabel}>Ideal Weight</Text>
+                    <Text style={styles.healthValue}>
+                      {healthInsights.ideal_weight_kg ? `${healthInsights.ideal_weight_kg} kg` : "—"}
+                    </Text>
+                    <Text style={styles.healthSub}>Based on height</Text>
+                  </View>
+                  <View style={styles.healthCard}>
+                    <Text style={styles.healthLabel}>Water Target</Text>
+                    <Text style={styles.healthValue}>
+                      {healthInsights.water_intake_liters ? `${healthInsights.water_intake_liters} L` : "—"}
+                    </Text>
+                    <Text style={styles.healthSub}>Daily intake</Text>
+                  </View>
+                  <View style={styles.healthCard}>
+                    <Text style={styles.healthLabel}>Sleep Target</Text>
+                    <Text style={styles.healthValue}>
+                      {healthInsights.recommended_sleep_hours ? `${healthInsights.recommended_sleep_hours} h` : "—"}
+                    </Text>
+                    <Text style={styles.healthSub}>Recommended</Text>
+                  </View>
+                  <View style={styles.healthCardFull}>
+                    <Text style={styles.healthLabel}>Daily Calories</Text>
+                    <Text style={styles.healthValue}>
+                      {healthInsights.daily_calories ? `${healthInsights.daily_calories} kcal` : "—"}
+                    </Text>
+                    <Text style={styles.healthSub}>Based on profile</Text>
+                  </View>
+                </View>
+              </>
+            )}
+          </View>
+
           <View style={styles.progressSection}>
             <Text style={styles.sectionTitle}>Weekly Progress</Text>
             <View style={styles.chartPlaceholder}>
               <MaterialCommunityIcons name="chart-line" size={48} color="#ccc" />
               <Text style={styles.chartText}>Progress charts coming soon</Text>
+            </View>
+          </View>
+
+          <View style={styles.healthSection}>
+            <Text style={styles.sectionTitle}>Advanced Health Tools</Text>
+
+            <View style={styles.toolCard}>
+              <Text style={styles.toolTitle}>Recovery Check</Text>
+              <View style={styles.inlineRow}>
+                <TextInput
+                  style={styles.inlineInput}
+                  value={recoveryInput.sleep_hours}
+                  onChangeText={(v) => setRecoveryInput({ ...recoveryInput, sleep_hours: v })}
+                  keyboardType="decimal-pad"
+                  placeholder="Sleep hours"
+                />
+                <TouchableOpacity
+                  style={styles.smallChip}
+                  onPress={() =>
+                    setRecoveryInput({ ...recoveryInput, muscle_soreness: "low" })
+                  }
+                >
+                  <Text style={styles.smallChipText}>Low</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.smallChip}
+                  onPress={() =>
+                    setRecoveryInput({ ...recoveryInput, muscle_soreness: "moderate" })
+                  }
+                >
+                  <Text style={styles.smallChipText}>Moderate</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.smallChip}
+                  onPress={() =>
+                    setRecoveryInput({ ...recoveryInput, muscle_soreness: "high" })
+                  }
+                >
+                  <Text style={styles.smallChipText}>High</Text>
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity style={styles.toolBtn} onPress={runRecovery}>
+                <Text style={styles.toolBtnText}>Get Recovery</Text>
+              </TouchableOpacity>
+              {recoveryResult && (
+                <Text style={styles.resultText}>
+                  {recoveryResult.recovery_status} · {recoveryResult.recommendation}
+                </Text>
+              )}
+            </View>
+
+            <View style={styles.toolCard}>
+              <Text style={styles.toolTitle}>Match Fitness</Text>
+              <View style={styles.inlineRow}>
+                <TextInput
+                  style={styles.inlineInput}
+                  value={matchFitnessInput.distance_km}
+                  onChangeText={(v) => setMatchFitnessInput({ ...matchFitnessInput, distance_km: v })}
+                  keyboardType="decimal-pad"
+                  placeholder="Distance km"
+                />
+                <TextInput
+                  style={styles.inlineInput}
+                  value={matchFitnessInput.sprints}
+                  onChangeText={(v) => setMatchFitnessInput({ ...matchFitnessInput, sprints: v })}
+                  keyboardType="number-pad"
+                  placeholder="Sprints"
+                />
+              </View>
+              <TouchableOpacity style={styles.toolBtn} onPress={runMatchFitness}>
+                <Text style={styles.toolBtnText}>Get Fitness</Text>
+              </TouchableOpacity>
+              {matchFitnessResult && (
+                <Text style={styles.resultText}>
+                  Score {matchFitnessResult.match_fitness_score} · {matchFitnessResult.fitness_level}
+                </Text>
+              )}
+            </View>
+
+            <View style={styles.toolCard}>
+              <Text style={styles.toolTitle}>Training Load</Text>
+              <View style={styles.inlineRow}>
+                <TextInput
+                  style={styles.inlineInput}
+                  value={trainingLoadInput.session_duration_min}
+                  onChangeText={(v) => setTrainingLoadInput({ ...trainingLoadInput, session_duration_min: v })}
+                  keyboardType="number-pad"
+                  placeholder="Minutes"
+                />
+                <TextInput
+                  style={styles.inlineInput}
+                  value={trainingLoadInput.rpe}
+                  onChangeText={(v) => setTrainingLoadInput({ ...trainingLoadInput, rpe: v })}
+                  keyboardType="number-pad"
+                  placeholder="RPE"
+                />
+              </View>
+              <TouchableOpacity style={styles.toolBtn} onPress={runTrainingLoad}>
+                <Text style={styles.toolBtnText}>Get Load</Text>
+              </TouchableOpacity>
+              {trainingLoadResult && (
+                <Text style={styles.resultText}>
+                  {trainingLoadResult.training_load} · {trainingLoadResult.recommendation}
+                </Text>
+              )}
+            </View>
+
+            <View style={styles.toolCard}>
+              <Text style={styles.toolTitle}>Diet Plan</Text>
+              <View style={styles.inlineRow}>
+                <TextInput
+                  style={styles.inlineInput}
+                  value={dietInput.position}
+                  onChangeText={(v) => setDietInput({ ...dietInput, position: v })}
+                  placeholder="Position"
+                />
+              </View>
+              <TouchableOpacity style={styles.toolBtn} onPress={runDiet}>
+                <Text style={styles.toolBtnText}>Get Diet</Text>
+              </TouchableOpacity>
+              {dietResult && (
+                <Text style={styles.resultText}>
+                  {dietResult.calories} kcal · P {dietResult.macros?.protein} C {dietResult.macros?.carbs} F {dietResult.macros?.fats}
+                </Text>
+              )}
+            </View>
+
+            <View style={styles.toolCard}>
+              <Text style={styles.toolTitle}>Food Image Classifier</Text>
+              {foodImageUri ? (
+                <Image source={{ uri: foodImageUri }} style={styles.foodImage} />
+              ) : (
+                <View style={styles.foodPlaceholder}>
+                  <MaterialCommunityIcons name="image-outline" size={28} color="#999" />
+                  <Text style={styles.foodPlaceholderText}>No image selected</Text>
+                </View>
+              )}
+              <View style={styles.inlineRow}>
+                <TouchableOpacity style={styles.smallBtn} onPress={pickFoodImage}>
+                  <Text style={styles.smallBtnText}>Pick Image</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.smallBtnPrimary} onPress={runFoodPredict}>
+                  <Text style={styles.smallBtnPrimaryText}>Predict</Text>
+                </TouchableOpacity>
+              </View>
+              {foodPrediction && (
+                <Text style={styles.resultText}>
+                  {foodPrediction.predicted_class} · {Math.round((foodPrediction.confidence || 0) * 100)}%
+                </Text>
+              )}
             </View>
           </View>
 
@@ -476,6 +961,216 @@ const styles = StyleSheet.create({
   recommendationSection: {
     paddingHorizontal: 16,
     paddingVertical: 20,
+  },
+  healthSection: {
+    paddingHorizontal: 16,
+    paddingVertical: 20,
+  },
+  healthNotice: {
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#eee",
+  },
+  healthNoticeText: {
+    fontSize: 13,
+    color: "#666",
+    marginBottom: 10,
+  },
+  healthCta: {
+    alignSelf: "flex-start",
+    backgroundColor: "#FF6B6B",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  healthCtaText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  preferenceRow: {
+    marginBottom: 12,
+  },
+  prefLabel: {
+    fontSize: 12,
+    color: "#666",
+    marginBottom: 6,
+    fontWeight: "600",
+  },
+  prefChips: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  prefChip: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    alignItems: "center",
+    backgroundColor: "white",
+  },
+  prefChipActive: {
+    backgroundColor: "#4ECDC4",
+    borderColor: "#4ECDC4",
+  },
+  prefChipText: {
+    fontSize: 12,
+    color: "#666",
+    fontWeight: "600",
+    textTransform: "capitalize",
+  },
+  prefChipTextActive: {
+    color: "white",
+  },
+  healthGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 8,
+  },
+  toolCard: {
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  toolTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#000",
+    marginBottom: 8,
+  },
+  inlineRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 10,
+    flexWrap: "wrap",
+  },
+  inlineInput: {
+    flexGrow: 1,
+    backgroundColor: "#f5f5f5",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    minWidth: 110,
+  },
+  smallChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  smallChipText: {
+    fontSize: 12,
+    color: "#666",
+    fontWeight: "600",
+  },
+  toolBtn: {
+    backgroundColor: "#4ECDC4",
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  toolBtnText: {
+    color: "white",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  resultText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: "#333",
+  },
+  foodImage: {
+    width: "100%",
+    height: 160,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
+  foodPlaceholder: {
+    width: "100%",
+    height: 160,
+    borderRadius: 10,
+    backgroundColor: "#f5f5f5",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+    gap: 6,
+  },
+  foodPlaceholderText: {
+    fontSize: 12,
+    color: "#999",
+  },
+  smallBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    alignItems: "center",
+  },
+  smallBtnText: {
+    fontSize: 12,
+    color: "#666",
+    fontWeight: "600",
+  },
+  smallBtnPrimary: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#FF6B6B",
+    alignItems: "center",
+  },
+  smallBtnPrimaryText: {
+    fontSize: 12,
+    color: "white",
+    fontWeight: "700",
+  },
+  healthCard: {
+    width: "48%",
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  healthCardFull: {
+    width: "100%",
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  healthLabel: {
+    fontSize: 12,
+    color: "#999",
+    marginBottom: 6,
+  },
+  healthValue: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#000",
+    marginBottom: 4,
+  },
+  healthSub: {
+    fontSize: 11,
+    color: "#666",
   },
   recCard: {
     flexDirection: "row",

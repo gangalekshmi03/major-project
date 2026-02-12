@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, TextInput, FlatList, Alert } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, FlatList, Alert } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useState } from "react";
 import { router } from "expo-router";
 import { MaterialCommunityIcons } from '@expo/vector-icons';

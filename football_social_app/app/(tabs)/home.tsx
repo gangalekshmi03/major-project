@@ -1,7 +1,11 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/context/useAuth";
 import { router } from "expo-router";
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import type { ComponentProps } from "react";
+
+type MciName = ComponentProps<typeof MaterialCommunityIcons>["name"];
 
 export default function HomeScreen() {
   const { user } = useAuth();
@@ -39,9 +43,11 @@ export default function HomeScreen() {
       color: "#F38181",
       route: "/(modules)/injury",
     },
-  ];
+  ] as const;
 
-  const handleModulePress = (route: string) => {
+  type Module = (typeof modules)[number];
+
+  const handleModulePress = (route: Module["route"]) => {
     router.push(route);
   };
 

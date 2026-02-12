@@ -2,7 +2,7 @@ print(">>> backend.main LOADED <<<")
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from backend.routers import auth, posts, users, performance, wellness, coaching, injury, matches
+from backend.routers import auth, posts, users, performance, wellness, coaching, injury, matches, health
 from fastapi.security import HTTPBearer
 from fastapi.openapi.utils import get_openapi
 
@@ -33,6 +33,7 @@ app.include_router(wellness.router)
 app.include_router(coaching.router)
 app.include_router(injury.router)
 app.include_router(matches.router)
+app.include_router(health.router)
 
 
 @app.get("/")

@@ -4,11 +4,11 @@ import {
   TouchableOpacity,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   Alert,
   ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useState } from "react";
 import { signupUser } from "@/api/auth";
 import { useAuth } from "@/context/useAuth";

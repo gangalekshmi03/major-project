@@ -1,6 +1,5 @@
 import API from "./client";
-import * as FileSystem from "expo-file-system";
-import FormData from "form-data";
+import { Platform } from "react-native";
 
 // ============= GET CURRENT USER =============
 export const getCurrentUser = async () => {
@@ -44,6 +43,10 @@ export const updateProfile = async (data: {
   position?: string;
   preferred_foot?: string;
   jersey_number?: number;
+  age?: number;
+  gender?: string;
+  height_cm?: number;
+  weight_kg?: number;
 }) => {
   try {
     const formData = new FormData();
@@ -54,16 +57,27 @@ export const updateProfile = async (data: {
     if (data.position) formData.append("position", data.position);
     if (data.preferred_foot) formData.append("preferred_foot", data.preferred_foot);
     if (data.jersey_number) formData.append("jersey_number", data.jersey_number);
+    if (data.age !== undefined) formData.append("age", String(data.age));
+    if (data.gender) formData.append("gender", data.gender);
+    if (data.height_cm !== undefined) formData.append("height_cm", String(data.height_cm));
+    if (data.weight_kg !== undefined) formData.append("weight_kg", String(data.weight_kg));
 
-    // If profile pic provided, add it
+    // If profile pic provided, add it (React Native file upload)
     if (data.profile_pic) {
-      const response = await FileSystem.readAsStringAsync(data.profile_pic, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      const blob = new Blob([Buffer.from(response, "base64")], {
-        type: "image/jpeg",
-      });
-      formData.append("profile_pic", blob, "profile.jpg");
+      const uri = data.profile_pic;
+      const ext = uri.split(".").pop()?.toLowerCase();
+      const type =
+        ext === "png"
+          ? "image/png"
+          : ext === "jpg" || ext === "jpeg"
+            ? "image/jpeg"
+            : "image/jpeg";
+
+      formData.append("profile_pic", {
+        uri: Platform.OS === "ios" ? uri.replace("file://", "") : uri,
+        name: `profile.${ext || "jpg"}`,
+        type,
+      } as any);
     }
 
     const res = await API.put("/users/me", formData, {

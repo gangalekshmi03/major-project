@@ -1,11 +1,24 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, FlatList } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, FlatList } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useState } from "react";
+
+type Match = {
+  id: number;
+  date: string;
+  time: string;
+  opponent: string;
+  location: string;
+  result: string | null;
+  status: "completed" | "upcoming";
+  yourGoals?: number;
+  attendance: string;
+};
 
 export default function MatchesScreen() {
   const [filter, setFilter] = useState('all');
 
-  const matches = [
+  const matches: Match[] = [
     {
       id: 1,
       date: 'Jan 28, 2024',
@@ -46,7 +59,7 @@ export default function MatchesScreen() {
     return true;
   });
 
-  const renderMatch = ({ item }) => (
+  const renderMatch = ({ item }: { item: Match }) => (
     <TouchableOpacity
       style={[
         styles.matchCard,
@@ -93,8 +106,13 @@ export default function MatchesScreen() {
 
         {item.status === 'completed' ? (
           <View style={styles.result}>
-            <Text style={[styles.resultText, { color: item.result.includes('Won') ? '#4ECDC4' : '#FF6B6B' }]}>
-              {item.result}
+            <Text
+              style={[
+                styles.resultText,
+                { color: item.result?.includes('Won') ? '#4ECDC4' : '#FF6B6B' },
+              ]}
+            >
+              {item.result ?? '—'}
             </Text>
             {item.yourGoals !== undefined && (
               <Text style={styles.goalsText}>Your Goals: {item.yourGoals}</Text>

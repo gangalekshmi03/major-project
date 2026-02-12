@@ -51,7 +51,13 @@ export const getMe = async () => {
   try {
     const res = await API.get("/users/me");
     return res.data;
-  } catch (error) {
+  } catch (error: any) {
+    const status = error?.response?.status;
+    if (status === 401) {
+      // Token is missing/expired; clear it and let callers treat as logged out.
+      await AsyncStorage.removeItem("token");
+      return { user: null, status: "unauthorized" };
+    }
     console.error("Failed to fetch current user:", error);
     throw error;
   }

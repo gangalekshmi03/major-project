@@ -1,13 +1,48 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, FlatList } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, FlatList } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useState } from "react";
+
+type Coach = {
+  id: number;
+  name: string;
+  specialty: string;
+  rating: number;
+  reviews: number;
+  hourlyRate: string;
+  badge: string;
+};
+
+type Team = {
+  id: number;
+  name: string;
+  members: number;
+  wins: number;
+  icon: string;
+};
+
+type Player = {
+  id: number;
+  name: string;
+  position: string;
+  rating: number;
+  goals: number;
+  avatar: string;
+};
+
+type LeaderboardRow = {
+  rank: number;
+  name: string;
+  rating: number;
+  wins: number;
+};
 
 export default function ExploreScreen() {
   const [selectedCategory, setSelectedCategory] = useState('coaches');
 
   const categories = ['Coaches', 'Teams', 'Players', 'Leaderboards'];
 
-  const coaches = [
+  const coaches: Coach[] = [
     {
       id: 1,
       name: 'John Smith',
@@ -37,7 +72,7 @@ export default function ExploreScreen() {
     },
   ];
 
-  const teams = [
+  const teams: Team[] = [
     {
       id: 1,
       name: 'City Strikers',
@@ -61,7 +96,7 @@ export default function ExploreScreen() {
     },
   ];
 
-  const players = [
+  const players: Player[] = [
     {
       id: 1,
       name: 'Alex Johnson',
@@ -88,7 +123,7 @@ export default function ExploreScreen() {
     },
   ];
 
-  const leaderboard = [
+  const leaderboard: LeaderboardRow[] = [
     { rank: 1, name: 'Emma Davis', rating: 9.1, wins: 34 },
     { rank: 2, name: 'Alex Johnson', rating: 8.7, wins: 28 },
     { rank: 3, name: 'Sarah Williams', rating: 8.6, wins: 25 },
@@ -96,7 +131,7 @@ export default function ExploreScreen() {
     { rank: 5, name: 'James Wilson', rating: 8.2, wins: 19 },
   ];
 
-  const renderCoach = ({ item }) => (
+  const renderCoach = ({ item }: { item: Coach }) => (
     <TouchableOpacity style={styles.card}>
       <View style={styles.cardHeader}>
         <View style={styles.nameSection}>
@@ -118,7 +153,7 @@ export default function ExploreScreen() {
     </TouchableOpacity>
   );
 
-  const renderTeam = ({ item }) => (
+  const renderTeam = ({ item }: { item: Team }) => (
     <TouchableOpacity style={styles.card}>
       <View style={styles.teamHeader}>
         <View>
@@ -138,7 +173,7 @@ export default function ExploreScreen() {
     </TouchableOpacity>
   );
 
-  const renderPlayer = ({ item }) => (
+  const renderPlayer = ({ item }: { item: Player }) => (
     <TouchableOpacity style={styles.card}>
       <View style={styles.playerHeader}>
         <View style={styles.playerAvatar}>
@@ -166,7 +201,7 @@ export default function ExploreScreen() {
     </TouchableOpacity>
   );
 
-  const renderLeaderboardRow = ({ item }) => (
+  const renderLeaderboardRow = ({ item }: { item: LeaderboardRow }) => (
     <View style={styles.leaderboardRow}>
       <View style={styles.rankBadge}>
         <Text style={styles.rankText}>{item.rank}</Text>
