@@ -182,6 +182,18 @@ def _normalize_ml_payload(path: str, payload: dict):
         }
         if position in position_map:
             normalized["position"] = position_map[position]
+        # Some deployments expect full words; support both.
+        position_code = str(normalized.get("position", "")).strip().lower()
+        full_map = {
+            "gk": "goalkeeper",
+            "def": "defender",
+            "mid": "midfielder",
+            "fwd": "forward",
+        }
+        normalized["position_full"] = full_map.get(position_code, position_code)
+        # Keep one canonical field for ML calls that prefer full labels.
+        if normalized.get("position") in ["gk", "def", "mid", "fwd"]:
+            normalized["position"] = normalized["position_full"]
 
     elif path == "/calorie":
         # UI may send typo/alias for quantity.
@@ -193,10 +205,20 @@ def _normalize_ml_payload(path: str, payload: dict):
         if "duration_hr" not in normalized and "duration_hours" in normalized:
             normalized["duration_hr"] = normalized["duration_hours"]
 
+    elif path == "/ideal_weight":
+        # Support services that expect plain 'height'.
+        if "height" not in normalized and "height_cm" in normalized:
+            normalized["height"] = normalized["height_cm"]
+
+    elif path == "/predict_image_json":
+        # Support both key names used across model services.
+        if "image_b64" not in normalized and "image_base64" in normalized:
+            normalized["image_b64"] = normalized["image_base64"]
+
     return normalized
 
 
-def _http_json(method: str, url: str, payload: dict | None = None):
+def _http_json(method: str, url: str, payload: dict | None = None, timeout_s: float = 30.0):
     ml_headers = {
         "Content-Type": "application/json",
         "X-ML-API-Key": os.getenv("WELLNESS_ML_API_KEY", "Krish123"),
@@ -205,14 +227,14 @@ def _http_json(method: str, url: str, payload: dict | None = None):
         if method == "GET":
             if payload:
                 url = f"{url}?{urlencode(payload)}"
-            resp = http.request("GET", url, headers=ml_headers, timeout=10.0, retries=False)
+            resp = http.request("GET", url, headers=ml_headers, timeout=timeout_s, retries=False)
         else:
             resp = http.request(
                 "POST",
                 url,
                 body=json.dumps(payload or {}).encode("utf-8"),
                 headers=ml_headers,
-                timeout=10.0,
+                timeout=timeout_s,
                 retries=False,
             )
     except Exception as exc:
@@ -263,8 +285,9 @@ def _call_ml(path: str, payload: dict):
 
     last_status = 502
     last_detail = "No response from ML service"
+    timeout_s = 60.0 if path == "/predict_image_json" else 30.0
     for method, url, data in attempts:
-        parsed, status, detail = _http_json(method, url, data)
+        parsed, status, detail = _http_json(method, url, data, timeout_s=timeout_s)
         if parsed is not None:
             if isinstance(parsed, dict):
                 return _normalize_ml_response(path, parsed)

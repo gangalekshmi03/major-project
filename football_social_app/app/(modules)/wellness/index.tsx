@@ -1229,13 +1229,15 @@ const styles = StyleSheet.create({
   },
   foodImage: {
     width: "100%",
-    height: 160,
+    height: 240,
     borderRadius: 10,
     marginBottom: 10,
+    resizeMode: "contain",
+    backgroundColor: "#f5f5f5",
   },
   foodPlaceholder: {
     width: "100%",
-    height: 160,
+    height: 240,
     borderRadius: 10,
     backgroundColor: "#f5f5f5",
     alignItems: "center",
