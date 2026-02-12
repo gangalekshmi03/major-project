@@ -87,6 +87,70 @@ export default function WellnessScreen() {
       "Request failed"
     );
   };
+  const asNumber = (value: any): number | undefined => {
+    if (value === null || value === undefined) return undefined;
+    if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+    if (typeof value === "string") {
+      const match = value.match(/-?\d+(\.\d+)?/);
+      if (!match) return undefined;
+      const num = Number(match[0]);
+      return Number.isFinite(num) ? num : undefined;
+    }
+    return undefined;
+  };
+  const computeFallbackInsights = (user: any) => {
+    const age = asNumber(user?.age);
+    const heightCm = asNumber(user?.height_cm);
+    const weightKg = asNumber(user?.weight_kg);
+    const gender = String(user?.gender || "").toLowerCase();
+
+    let bmi: number | undefined;
+    if (heightCm && weightKg) {
+      const h = heightCm / 100;
+      bmi = Number((weightKg / (h * h)).toFixed(2));
+    }
+
+    let idealWeight: number | undefined;
+    if (heightCm) {
+      idealWeight = gender === "male"
+        ? Number((50 + 0.9 * (heightCm - 152)).toFixed(2))
+        : Number((45.5 + 0.9 * (heightCm - 152)).toFixed(2));
+    }
+
+    let waterTarget: number | undefined;
+    if (weightKg) {
+      const extra = activityLevel === "low" ? 0.2 : activityLevel === "high" ? 0.8 : 0.5;
+      waterTarget = Number((weightKg * 0.033 + extra).toFixed(2));
+    }
+
+    let sleepTarget: number | undefined;
+    if (age !== undefined) {
+      if (age <= 13) sleepTarget = 10;
+      else if (age <= 17) sleepTarget = 9;
+      else if (age <= 64) sleepTarget = 8;
+      else sleepTarget = 7.5;
+      if (trainingIntensity === "high") sleepTarget += 0.5;
+      sleepTarget = Number(sleepTarget.toFixed(1));
+    }
+
+    let dailyCalories: number | undefined;
+    if (age && heightCm && weightKg && (gender === "male" || gender === "female")) {
+      const bmr = 10 * weightKg + 6.25 * heightCm - 5 * age + (gender === "male" ? 5 : -161);
+      const factor = activityLevel === "low" ? 1.2 : activityLevel === "high" ? 1.8 : 1.55;
+      let value = bmr * factor;
+      if (goal === "lose") value -= 300;
+      if (goal === "gain") value += 300;
+      dailyCalories = Math.round(value);
+    }
+
+    return {
+      bmi,
+      idealWeight,
+      waterTarget,
+      sleepTarget,
+      dailyCalories,
+    };
+  };
 
   const handleLogData = async () => {
     if (!water && !sleep && !calories) {
@@ -171,7 +235,7 @@ export default function WellnessScreen() {
       }
       setProfileMissing(false);
 
-      const [bmiRes, idealRes, waterRes, sleepRes, calorieRes] = await Promise.all([
+      const results = await Promise.allSettled([
         getBmi({ height_cm: user.height_cm, weight_kg: user.weight_kg }),
         getIdealWeight({ height_cm: user.height_cm, gender: user.gender }),
         getWater({ weight_kg: user.weight_kg, activity_level: activityLevel }),
@@ -186,13 +250,39 @@ export default function WellnessScreen() {
         }),
       ]);
 
+      const bmiRes = results[0].status === "fulfilled" ? results[0].value : null;
+      const idealRes = results[1].status === "fulfilled" ? results[1].value : null;
+      const waterRes = results[2].status === "fulfilled" ? results[2].value : null;
+      const sleepRes = results[3].status === "fulfilled" ? results[3].value : null;
+      const calorieRes = results[4].status === "fulfilled" ? results[4].value : null;
+      const fallback = computeFallbackInsights(user);
+
       setHealthInsights({
-        bmi: bmiRes?.bmi,
-        bmi_category: bmiRes?.category,
-        ideal_weight_kg: idealRes?.ideal_weight_kg,
-        water_intake_liters: waterRes?.water_intake_liters,
-        recommended_sleep_hours: sleepRes?.recommended_sleep_hours,
-        daily_calories: calorieRes?.daily_calories,
+        bmi: asNumber(bmiRes?.bmi ?? bmiRes?.bmi_value ?? bmiRes?.body_mass_index) ?? fallback.bmi,
+        bmi_category: bmiRes?.category ?? bmiRes?.bmi_category,
+        ideal_weight_kg: asNumber(
+          idealRes?.ideal_weight_kg ??
+          idealRes?.ideal_weight ??
+          idealRes?.ideal ??
+          idealRes?.your_ideal_weight
+        ) ?? fallback.idealWeight,
+        water_intake_liters: asNumber(
+          waterRes?.water_intake_liters ??
+          waterRes?.water_needed_l ??
+          waterRes?.water_needed ??
+          waterRes?.daily_water_liters
+        ) ?? fallback.waterTarget,
+        recommended_sleep_hours: asNumber(
+          sleepRes?.recommended_sleep_hours ??
+          sleepRes?.sleep_hours ??
+          sleepRes?.hours
+        ) ?? fallback.sleepTarget,
+        daily_calories: asNumber(
+          calorieRes?.daily_calories ??
+          calorieRes?.calories ??
+          calorieRes?.body_calories ??
+          calorieRes?.daily_calories_needed
+        ) ?? fallback.dailyCalories,
       });
     } catch (error) {
       console.log("fetchHealthInsights error", error);
@@ -306,6 +396,40 @@ export default function WellnessScreen() {
       console.log("runFoodPredict error", error);
       Alert.alert("Error", String(getErrorMessage(error)));
     }
+  };
+
+  const renderResultFields = (result: any) => {
+    if (!result || typeof result !== "object") return null;
+    const entries: Array<[string, any]> = [];
+    const flatten = (obj: any, prefix = "") => {
+      if (!obj || typeof obj !== "object") return;
+      Object.entries(obj).forEach(([k, v]) => {
+        const nextKey = prefix ? `${prefix}.${k}` : k;
+        if (v && typeof v === "object" && !Array.isArray(v)) {
+          flatten(v, nextKey);
+        } else {
+          entries.push([nextKey, v]);
+        }
+      });
+    };
+    flatten(result);
+
+    return entries.map(([key, value]) => {
+      let displayValue: string;
+      if (value === null || value === undefined) {
+        displayValue = "-";
+      } else if (Array.isArray(value)) {
+        displayValue = value.join(", ");
+      } else {
+        displayValue = String(value);
+      }
+      return (
+        <View key={key} style={styles.resultRow}>
+          <Text style={styles.resultKey}>{key}</Text>
+          <Text style={styles.resultValue}>{displayValue}</Text>
+        </View>
+      );
+    });
   };
 
   useEffect(() => {
@@ -657,9 +781,7 @@ export default function WellnessScreen() {
                 <Text style={styles.toolBtnText}>Get Recovery</Text>
               </TouchableOpacity>
               {recoveryResult && (
-                <Text style={styles.resultText}>
-                  {recoveryResult.recovery_status} · {recoveryResult.recommendation}
-                </Text>
+                <View style={styles.resultBlock}>{renderResultFields(recoveryResult)}</View>
               )}
             </View>
 
@@ -685,9 +807,7 @@ export default function WellnessScreen() {
                 <Text style={styles.toolBtnText}>Get Fitness</Text>
               </TouchableOpacity>
               {matchFitnessResult && (
-                <Text style={styles.resultText}>
-                  Score {matchFitnessResult.match_fitness_score} · {matchFitnessResult.fitness_level}
-                </Text>
+                <View style={styles.resultBlock}>{renderResultFields(matchFitnessResult)}</View>
               )}
             </View>
 
@@ -713,9 +833,7 @@ export default function WellnessScreen() {
                 <Text style={styles.toolBtnText}>Get Load</Text>
               </TouchableOpacity>
               {trainingLoadResult && (
-                <Text style={styles.resultText}>
-                  {trainingLoadResult.training_load} · {trainingLoadResult.recommendation}
-                </Text>
+                <View style={styles.resultBlock}>{renderResultFields(trainingLoadResult)}</View>
               )}
             </View>
 
@@ -733,9 +851,7 @@ export default function WellnessScreen() {
                 <Text style={styles.toolBtnText}>Get Diet</Text>
               </TouchableOpacity>
               {dietResult && (
-                <Text style={styles.resultText}>
-                  {dietResult.calories} kcal · P {dietResult.macros?.protein} C {dietResult.macros?.carbs} F {dietResult.macros?.fats}
-                </Text>
+                <View style={styles.resultBlock}>{renderResultFields(dietResult)}</View>
               )}
             </View>
 
@@ -758,9 +874,7 @@ export default function WellnessScreen() {
                 </TouchableOpacity>
               </View>
               {foodPrediction && (
-                <Text style={styles.resultText}>
-                  {foodPrediction.predicted_class} · {Math.round((foodPrediction.confidence || 0) * 100)}%
-                </Text>
+                <View style={styles.resultBlock}>{renderResultFields(foodPrediction)}</View>
               )}
             </View>
           </View>
@@ -1090,6 +1204,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#333",
   },
+  resultBlock: {
+    marginTop: 8,
+    gap: 6,
+  },
+  resultRow: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#eee",
+    backgroundColor: "#fafafa",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  resultKey: {
+    fontSize: 11,
+    color: "#999",
+    textTransform: "capitalize",
+  },
+  resultValue: {
+    marginTop: 2,
+    fontSize: 12,
+    color: "#333",
+    flexShrink: 1,
+  },
   foodImage: {
     width: "100%",
     height: 160,
@@ -1245,3 +1382,4 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
+

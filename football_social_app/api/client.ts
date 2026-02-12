@@ -1,7 +1,7 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const API_BASE_URL = "http://10.134.19.147:8000"; // not localhost on mobile
+const API_BASE_URL = "https://football-backend-staging.onrender.com"; // not localhost on mobile
 const ANALYZER_BASE_URL = "http://192.168.1.13:5000"; // update to analyzer host/IP
 
 const client = axios.create({
