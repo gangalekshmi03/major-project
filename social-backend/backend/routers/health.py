@@ -12,17 +12,21 @@ http = urllib3.PoolManager()
 
 
 def _http_json(method: str, url: str, payload: dict | None = None):
+    ml_headers = {
+        "Content-Type": "application/json",
+        "X-ML-API-Key": os.getenv("WELLNESS_ML_API_KEY", "Krish123"),
+    }
     try:
         if method == "GET":
             if payload:
                 url = f"{url}?{urlencode(payload)}"
-            resp = http.request("GET", url, timeout=10.0, retries=False)
+            resp = http.request("GET", url, headers=ml_headers, timeout=10.0, retries=False)
         else:
             resp = http.request(
                 "POST",
                 url,
                 body=json.dumps(payload or {}).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
+                headers=ml_headers,
                 timeout=10.0,
                 retries=False,
             )
