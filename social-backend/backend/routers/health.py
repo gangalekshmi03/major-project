@@ -131,13 +131,24 @@ def _to_query_payload(path: str, payload: dict):
     return mapped
 
 
+def _path_variants(path: str):
+    variants = [path]
+    hyphen = path.replace("_", "-")
+    if hyphen != path:
+        variants.append(hyphen)
+    return variants
+
+
 def _call_ml(path: str, payload: dict):
     # Tries modern API contract first, then legacy Flask UI routes.
-    attempts = [
-        ("POST", f"{ML_BASE_URL}/api{path}", payload),
-        ("POST", f"{ML_BASE_URL}{path}", payload),
-        ("GET", f"{ML_BASE_URL}{path}", _to_query_payload(path, payload)),
-    ]
+    attempts = []
+    for p in _path_variants(path):
+        attempts.append(("POST", f"{ML_BASE_URL}/api{p}", payload))
+    for p in _path_variants(path):
+        attempts.append(("POST", f"{ML_BASE_URL}{p}", payload))
+    for p in _path_variants(path):
+        attempts.append(("GET", f"{ML_BASE_URL}{p}", _to_query_payload(path, payload)))
+
     last_status = 502
     last_detail = "No response from ML service"
     for method, url, data in attempts:
