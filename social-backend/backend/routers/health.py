@@ -7,8 +7,82 @@ from backend.utils.auth_utils import get_current_user
 
 router = APIRouter(prefix="/health", tags=["Health ML"])
 
-ML_BASE_URL = os.getenv("ML_BASE_URL", "http://10.134.19.52:5000").rstrip("/")
+ML_BASE_URL = os.getenv("ML_BASE_URL", "http://wellness-ml-flask.onrender.com").rstrip("/")
 http = urllib3.PoolManager()
+
+
+def _first_value(data: dict, keys: list[str], default=None):
+    for key in keys:
+        if key in data and data[key] is not None:
+            return data[key]
+    return default
+
+
+def _normalize_ml_response(path: str, data: dict):
+    # Keep original payload and backfill keys expected by frontend.
+    normalized = dict(data or {})
+
+    if path == "/bmi":
+        normalized["bmi"] = _first_value(normalized, ["bmi", "bmi_value", "body_mass_index"])
+        normalized["category"] = _first_value(normalized, ["category", "bmi_category"])
+
+    elif path == "/calorie":
+        normalized["daily_calories"] = _first_value(
+            normalized, ["daily_calories", "calories", "body_calories"]
+        )
+
+    elif path == "/water":
+        normalized["water_intake_liters"] = _first_value(
+            normalized, ["water_intake_liters", "water_needed_l", "water_needed"]
+        )
+
+    elif path == "/ideal_weight":
+        normalized["ideal_weight_kg"] = _first_value(
+            normalized, ["ideal_weight_kg", "ideal_weight", "ideal"]
+        )
+
+    elif path == "/sleep":
+        normalized["recommended_sleep_hours"] = _first_value(
+            normalized, ["recommended_sleep_hours", "sleep_hours", "hours"]
+        )
+
+    elif path == "/recovery":
+        normalized["recovery_status"] = _first_value(
+            normalized, ["recovery_status", "status", "fatigue"]
+        )
+        normalized["recommendation"] = _first_value(normalized, ["recommendation", "advice"])
+
+    elif path == "/match_fitness":
+        normalized["match_fitness_score"] = _first_value(
+            normalized, ["match_fitness_score", "score", "fitness_score"]
+        )
+        normalized["fitness_level"] = _first_value(
+            normalized, ["fitness_level", "readiness", "status", "fitness"]
+        )
+
+    elif path == "/training_load":
+        normalized["training_load"] = _first_value(
+            normalized, ["training_load", "fatigue", "load", "status"]
+        )
+        normalized["recommendation"] = _first_value(normalized, ["recommendation", "advice"])
+
+    elif path == "/diet":
+        macros = normalized.get("macros") or {}
+        if isinstance(macros, dict):
+            macros["protein"] = _first_value(macros, ["protein", "protein_g"])
+            macros["carbs"] = _first_value(macros, ["carbs", "carbs_g"])
+            macros["fats"] = _first_value(macros, ["fats", "fat", "fats_g"])
+            normalized["macros"] = macros
+
+    elif path == "/predict_image_json":
+        normalized["predicted_class"] = _first_value(
+            normalized, ["predicted_class", "food", "class", "prediction"]
+        )
+        normalized["confidence"] = _first_value(
+            normalized, ["confidence", "probability", "score"]
+        )
+
+    return normalized
 
 
 def _http_json(method: str, url: str, payload: dict | None = None):
@@ -69,6 +143,8 @@ def _call_ml(path: str, payload: dict):
     for method, url, data in attempts:
         parsed, status, detail = _http_json(method, url, data)
         if parsed is not None:
+            if isinstance(parsed, dict):
+                return _normalize_ml_response(path, parsed)
             return parsed
         last_status = status
         last_detail = detail
