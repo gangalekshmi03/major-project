@@ -1,6 +1,13 @@
 import API from "./client";
 import { Platform } from "react-native";
 
+export type AppUser = {
+  id: string;
+  username?: string;
+  full_name?: string;
+  email?: string;
+};
+
 // ============= GET CURRENT USER =============
 export const getCurrentUser = async () => {
   try {
@@ -8,6 +15,17 @@ export const getCurrentUser = async () => {
     return res.data;
   } catch (error) {
     console.error("Failed to fetch current user:", error);
+    throw error;
+  }
+};
+
+// ============= LIST REGISTERED USERS =============
+export const listUsers = async (skip: number = 0, limit: number = 100) => {
+  try {
+    const res = await API.get(`/users/?skip=${skip}&limit=${limit}`);
+    return res.data as { status: string; users: AppUser[]; message?: string };
+  } catch (error) {
+    console.error("Failed to fetch users list:", error);
     throw error;
   }
 };

@@ -50,7 +50,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
         const meResponse = await getMe();
         if (meResponse.user) {
           setUser({
-            id: meResponse.user._id || data.user_id,
+            id: meResponse.user.id || meResponse.user._id || data.user_id,
             email: meResponse.user.email || email,
             username: meResponse.user.username,
             full_name: meResponse.user.full_name,
@@ -93,7 +93,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
             const meResponse = await getMe();
             if (meResponse.user) {
               setUser({
-                id: meResponse.user._id,
+                id: meResponse.user.id || meResponse.user._id,
                 email: meResponse.user.email,
                 username: meResponse.user.username,
                 full_name: meResponse.user.full_name,

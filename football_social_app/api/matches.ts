@@ -6,14 +6,43 @@ import API from "./client";
  * MongoDB integration for organizing and tracking matches
  */
 
+export type MatchStatus = "upcoming" | "live" | "completed";
+
+export type MatchItem = {
+  _id: string;
+  organizer_id: string;
+  title: string;
+  date: string;
+  time: string;
+  location: string;
+  match_type: string;
+  description?: string;
+  max_players: number;
+  participants: string[];
+  participant_count: number;
+  status: MatchStatus;
+  score?: {
+    team_a: number;
+    team_b: number;
+  };
+};
+
+export type MatchParticipant = {
+  _id: string;
+  username?: string;
+  full_name?: string;
+  email?: string;
+};
+
 // ============= CREATE MATCH =============
 // Backend: POST /matches/create
 export const createMatch = async (data: {
-  opponent: string;
+  title: string;
   date: string; // YYYY-MM-DD
   time: string; // HH:mm
   location: string;
   match_type: string; // "friendly" | "league" | "tournament"
+  max_players?: number;
   description?: string;
 }) => {
   try {
@@ -28,12 +57,14 @@ export const createMatch = async (data: {
 // ============= GET ALL MATCHES =============
 // Backend: GET /matches/all
 export const getAllMatches = async (
-  filter: "all" | "upcoming" | "completed" = "all",
+  filterBy: "all" | "upcoming" | "completed" | "my" = "all",
   limit: number = 20,
   page: number = 1
 ) => {
   try {
-    const res = await API.get(`/matches/all?filter=${filter}&limit=${limit}&page=${page}`);
+    const res = await API.get(
+      `/matches/all?filter_by=${filterBy}&limit=${limit}&page=${page}`
+    );
     return res.data;
   } catch (error) {
     console.error("Failed to fetch matches:", error);
@@ -89,6 +120,34 @@ export const getMatchParticipants = async (matchId: string) => {
   }
 };
 
+// ============= ADD PARTICIPANT (ORGANIZER) =============
+// Backend: POST /matches/{match_id}/participants/add
+export const addMatchParticipant = async (matchId: string, userId: string) => {
+  try {
+    const res = await API.post(`/matches/${matchId}/participants/add`, {
+      user_id: userId,
+    });
+    return res.data;
+  } catch (error) {
+    console.error("Failed to add participant:", error);
+    throw error;
+  }
+};
+
+// ============= REMOVE PARTICIPANT (ORGANIZER) =============
+// Backend: POST /matches/{match_id}/participants/remove
+export const removeMatchParticipant = async (matchId: string, userId: string) => {
+  try {
+    const res = await API.post(`/matches/${matchId}/participants/remove`, {
+      user_id: userId,
+    });
+    return res.data;
+  } catch (error) {
+    console.error("Failed to remove participant:", error);
+    throw error;
+  }
+};
+
 // ============= UPLOAD MATCH VIDEO =============
 // Backend: POST /matches/{match_id}/video
 export const uploadMatchVideo = async (matchId: string, videoUri: string) => {
@@ -117,9 +176,8 @@ export const uploadMatchVideo = async (matchId: string, videoUri: string) => {
 export const updateMatchScore = async (
   matchId: string,
   data: {
-    home_goals: number;
-    away_goals: number;
-    status: "ongoing" | "completed";
+    score: { team_a: number; team_b: number };
+    status: MatchStatus;
   }
 ) => {
   try {
